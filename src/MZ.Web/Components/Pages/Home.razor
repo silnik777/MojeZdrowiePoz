@@ -1,0 +1,16 @@
+@page "/"
+@using MZ.Application.Abstractions
+@inject ICurrentUser CurrentUser
+
+<PageTitle>Moje Zdrowie POZ</PageTitle>
+
+<h1>Moje Zdrowie — wsparcie programu w POZ</h1>
+
+<p class="lead">Narzędzie wspierające prowadzenie i rozliczanie programu profilaktycznego „Moje Zdrowie".</p>
+
+<div class="alert alert-secondary">
+    Zalogowany: <strong>@(CurrentUser.NazwaLogowania ?? "—")</strong>,
+    rola: <strong>@(CurrentUser.Rola?.ToString() ?? "—")</strong>
+</div>
+
+<p>Przejdź do <a href="pipeline">pipeline pacjentów</a>, aby zobaczyć stan procesu.</p>

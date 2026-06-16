@@ -1,0 +1,24 @@
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+
+# .NET / Rider / VS
+.vs/
+.idea/
+*.user
+*.suo
+
+# Lokalne bazy deweloperskie
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+
+# Logi
+*.log
+
+# Pliki tymczasowe
+[Tt]emp/

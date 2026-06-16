@@ -1,0 +1,64 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{63A4E995-8D18-4057-B916-F3061EE01122}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MZ.Domain", "src\MZ.Domain\MZ.Domain.csproj", "{9E3FD780-FCF3-4771-A655-BE0CFD036868}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MZ.Application", "src\MZ.Application\MZ.Application.csproj", "{9C5D2654-9FD9-4371-9610-37065FA32C4F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MZ.Infrastructure", "src\MZ.Infrastructure\MZ.Infrastructure.csproj", "{A9486498-B09B-4B6E-B59D-370792478FB8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MZ.Web", "src\MZ.Web\MZ.Web.csproj", "{8771D24A-BF6C-4A55-A4D9-18BB8C8AB112}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{D22D19E2-01F5-4D0F-98E8-65EFEE97FA46}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MZ.Domain.Tests", "tests\MZ.Domain.Tests\MZ.Domain.Tests.csproj", "{E4346E95-3051-49DE-BA85-FF17C5BEA80A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MZ.Application.Tests", "tests\MZ.Application.Tests\MZ.Application.Tests.csproj", "{D8D9B148-C900-4556-83AA-FFF1D0C91228}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9E3FD780-FCF3-4771-A655-BE0CFD036868}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9E3FD780-FCF3-4771-A655-BE0CFD036868}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9E3FD780-FCF3-4771-A655-BE0CFD036868}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9E3FD780-FCF3-4771-A655-BE0CFD036868}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9C5D2654-9FD9-4371-9610-37065FA32C4F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9C5D2654-9FD9-4371-9610-37065FA32C4F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9C5D2654-9FD9-4371-9610-37065FA32C4F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9C5D2654-9FD9-4371-9610-37065FA32C4F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A9486498-B09B-4B6E-B59D-370792478FB8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A9486498-B09B-4B6E-B59D-370792478FB8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A9486498-B09B-4B6E-B59D-370792478FB8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A9486498-B09B-4B6E-B59D-370792478FB8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8771D24A-BF6C-4A55-A4D9-18BB8C8AB112}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8771D24A-BF6C-4A55-A4D9-18BB8C8AB112}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8771D24A-BF6C-4A55-A4D9-18BB8C8AB112}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8771D24A-BF6C-4A55-A4D9-18BB8C8AB112}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E4346E95-3051-49DE-BA85-FF17C5BEA80A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E4346E95-3051-49DE-BA85-FF17C5BEA80A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E4346E95-3051-49DE-BA85-FF17C5BEA80A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E4346E95-3051-49DE-BA85-FF17C5BEA80A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D8D9B148-C900-4556-83AA-FFF1D0C91228}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D8D9B148-C900-4556-83AA-FFF1D0C91228}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D8D9B148-C900-4556-83AA-FFF1D0C91228}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D8D9B148-C900-4556-83AA-FFF1D0C91228}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{9E3FD780-FCF3-4771-A655-BE0CFD036868} = {63A4E995-8D18-4057-B916-F3061EE01122}
+		{9C5D2654-9FD9-4371-9610-37065FA32C4F} = {63A4E995-8D18-4057-B916-F3061EE01122}
+		{A9486498-B09B-4B6E-B59D-370792478FB8} = {63A4E995-8D18-4057-B916-F3061EE01122}
+		{8771D24A-BF6C-4A55-A4D9-18BB8C8AB112} = {63A4E995-8D18-4057-B916-F3061EE01122}
+		{E4346E95-3051-49DE-BA85-FF17C5BEA80A} = {D22D19E2-01F5-4D0F-98E8-65EFEE97FA46}
+		{D8D9B148-C900-4556-83AA-FFF1D0C91228} = {D22D19E2-01F5-4D0F-98E8-65EFEE97FA46}
+	EndGlobalSection
+EndGlobal

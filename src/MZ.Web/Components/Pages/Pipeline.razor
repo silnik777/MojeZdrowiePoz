@@ -1,0 +1,73 @@
+@page "/pipeline"
+@using Microsoft.EntityFrameworkCore
+@using MZ.Domain.Entities
+@using MZ.Domain.Enums
+@using MZ.Infrastructure.Persistence
+@inject MzDbContext Db
+
+<PageTitle>Pipeline pacjentów</PageTitle>
+
+<h1>Pipeline pacjentów</h1>
+
+<p>Liczba przypadków w poszczególnych statusach programu.</p>
+
+<div class="row g-2 mb-4">
+    @foreach (var status in Enum.GetValues<PipelineStatus>())
+    {
+        <div class="col-6 col-md-3">
+            <div class="border rounded p-2">
+                <div class="small text-muted">@status</div>
+                <div class="fs-4">@(_licznik.GetValueOrDefault(status))</div>
+            </div>
+        </div>
+    }
+</div>
+
+@if (_przypadki is null)
+{
+    <p><em>Wczytywanie…</em></p>
+}
+else if (_przypadki.Count == 0)
+{
+    <div class="alert alert-info">
+        Brak przypadków. Rejestr zostanie zasilony w kolejnym etapie (Faza 1: ankiety i kwalifikacja).
+    </div>
+}
+else
+{
+    <table class="table table-sm">
+        <thead>
+            <tr><th>Pacjent</th><th>Status</th><th>Termin kontaktu</th><th>Braki badań</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var e in _przypadki)
+            {
+                <tr>
+                    <td>@e.Patient.Nazwisko @e.Patient.Imie</td>
+                    <td>@e.Status</td>
+                    <td>@(e.TerminKontaktu?.ToString("yyyy-MM-dd") ?? "—")</td>
+                    <td>@(e.MaBrakiBadan ? "⚠ tak" : "—")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private Dictionary<PipelineStatus, int> _licznik = new();
+    private List<ProgramEnrollment>? _przypadki;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _licznik = await Db.Enrollments
+            .GroupBy(e => e.Status)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count);
+
+        _przypadki = await Db.Enrollments
+            .Include(e => e.Patient)
+            .OrderBy(e => e.Status)
+            .Take(200)
+            .ToListAsync();
+    }
+}
