@@ -81,4 +81,31 @@ public class EnrollmentService
         await _audit.ZapiszAsync(AkcjaAudytu.Modyfikacja, nameof(ProgramEnrollment), e.Id.ToString(),
             e.PatientId, szczegolyJson: $"{{\"z\":\"{poprzedni}\",\"na\":\"{nowy}\"}}", ct: ct);
     }
+
+    /// <summary>
+    /// Ustawia status wyników (komplet/częściowe) przy imporcie. Dopuszcza wejście z etapów
+    /// poprzedzających wyniki (gdy wyniki przyszły zanim oznaczono umówienie/realizację badań).
+    /// </summary>
+    public async Task OznaczWynikiAsync(Guid id, bool kompletne, string? komentarz = null, CancellationToken ct = default)
+    {
+        var e = await _db.Enrollments.FirstOrDefaultAsync(x => x.Id == id, ct)
+                ?? throw new InvalidOperationException("Nie znaleziono przypadku.");
+
+        var docelowy = kompletne ? PipelineStatus.WynikiKomplet : PipelineStatus.WynikiCzesciowe;
+
+        var dozwolone = e.Status is PipelineStatus.SkierowanieWystawione or PipelineStatus.BadaniaUmowione
+            or PipelineStatus.BadaniaWToku or PipelineStatus.WynikiCzesciowe or PipelineStatus.WynikiKomplet;
+        if (!dozwolone || e.Status == docelowy) return;
+
+        var poprzedni = e.Status;
+        e.Status = docelowy;
+        _db.PipelineHistory.Add(new PipelineHistory
+        {
+            EnrollmentId = e.Id, StatusZ = poprzedni, StatusNa = docelowy,
+            DataPrzejscia = _time.GetUtcNow(), Komentarz = komentarz ?? "Import wyników"
+        });
+        await _db.SaveChangesAsync(ct);
+        await _audit.ZapiszAsync(AkcjaAudytu.Modyfikacja, nameof(ProgramEnrollment), e.Id.ToString(),
+            e.PatientId, szczegolyJson: $"{{\"z\":\"{poprzedni}\",\"na\":\"{docelowy}\"}}", ct: ct);
+    }
 }

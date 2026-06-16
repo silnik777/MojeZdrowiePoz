@@ -10,7 +10,9 @@ namespace MZ.Application.Abstractions;
 public interface ILabResultSource
 {
     TypIntegracjiLaboratorium Typ { get; }
-    Task<IReadOnlyList<TestResultDto>> WczytajWynikiAsync(Stream zrodlo, Guid laboratoriumId, CancellationToken ct = default);
+
+    /// <summary>Parsuje strumień (np. plik HL7 CDA XML) do listy dokumentów wyników.</summary>
+    Task<IReadOnlyList<LabResultDocumentDto>> WczytajAsync(Stream zrodlo, CancellationToken ct = default);
 }
 
 /// <summary>Port bramki SMS — wysyłka powiadomień do pacjentów.</summary>

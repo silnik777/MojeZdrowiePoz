@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using MZ.Application.Abstractions;
 using MZ.Application.Services;
 using MZ.Domain.Enums;
+using MZ.Infrastructure.Lab;
 using MZ.Infrastructure.Ocr;
 using MZ.Infrastructure.Persistence;
 using MZ.Infrastructure.Services;
@@ -19,6 +20,8 @@ public sealed class TestowyKontekst : IDisposable
     public EnrollmentService Enrollments { get; }
     public QuestionnaireService Questionnaires { get; }
     public QualificationService Qualifications { get; }
+    public LabResultImportService LabImport { get; }
+    public LabResultService LabResults { get; }
 
     public TestowyKontekst()
     {
@@ -33,12 +36,15 @@ public sealed class TestowyKontekst : IDisposable
         var time = TimeProvider.System;
         var scoring = new ScoringService();
         var packages = new PackageSelectionService();
+        var completeness = new CompletenessService();
         var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
 
         Patients = new PatientService(Db, audit);
         Enrollments = new EnrollmentService(Db, audit, time);
         Questionnaires = new QuestionnaireService(Db, scoring, new StubOcrService(), audit, config);
         Qualifications = new QualificationService(Db, scoring, packages, Enrollments, audit, time);
+        LabImport = new LabResultImportService(Db, new ELaboratCdaAdapter(), completeness, Enrollments, audit);
+        LabResults = new LabResultService(Db, completeness, LabImport, audit);
     }
 
     public void Dispose()

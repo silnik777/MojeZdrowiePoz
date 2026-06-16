@@ -12,6 +12,24 @@ public record TestResultDto(
     DateOnly? DataWyniku,
     string? SurowyRekord);
 
+/// <summary>
+/// Dokument wyników z laboratorium (np. jeden komunikat HL7 CDA): identyfikuje pacjenta/zlecenie
+/// i zawiera listę pozycji wyników. Plik może zawierać wiele dokumentów.
+/// </summary>
+public record LabResultDocumentDto(
+    string? Pesel,
+    string? IdZlecenia,
+    DateOnly? DataWyniku,
+    IReadOnlyList<TestResultDto> Wyniki);
+
+/// <summary>Podsumowanie operacji importu wyników.</summary>
+public record LabImportSummary(
+    int Dokumentow,
+    int Dopasowanych,
+    int ZapisanychWynikow,
+    int Niedopasowanych,
+    IReadOnlyList<string> Ostrzezenia);
+
 public record SmsWynikDto(bool Sukces, string? IdentyfikatorBramki, string? Blad);
 
 public record OcrWynikDto(string Tekst, double Pewnosc);

@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using MZ.Application.Abstractions;
 using MZ.Application.Services;
 using MZ.Infrastructure.Identity;
+using MZ.Infrastructure.Lab;
 using MZ.Infrastructure.Ocr;
 using MZ.Infrastructure.Persistence;
 using MZ.Infrastructure.Services;
@@ -47,11 +48,21 @@ public static class DependencyInjection
         // Adaptery (na razie zaślepka OCR — docelowo silnik OCR/OMR przetwarzający lokalnie).
         services.AddScoped<IOcrService, StubOcrService>();
 
+        // Adapter wyników laboratorium: eLaborat (Marcel) HL7 CDA.
+        services.AddScoped<ILabResultSource, ELaboratCdaAdapter>();
+
         // Serwisy aplikacyjne Fazy 1 (orkiestracja na EF Core).
         services.AddScoped<PatientService>();
         services.AddScoped<EnrollmentService>();
         services.AddScoped<QuestionnaireService>();
         services.AddScoped<QualificationService>();
+
+        // Serwisy Fazy 2: import i kontrola kompletności wyników.
+        services.AddScoped<LabResultImportService>();
+        services.AddScoped<LabResultService>();
+
+        // Nasłuch folderu eksportu eLaborat (aktywny tylko gdy skonfigurowano ELaborat:WatchFolder).
+        services.AddHostedService<ELaboratFolderWatcher>();
 
         return services;
     }

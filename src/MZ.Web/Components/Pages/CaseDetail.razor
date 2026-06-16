@@ -9,6 +9,8 @@
 @inject EnrollmentService Enrollments
 @inject QuestionnaireService Questionnaires
 @inject QualificationService Qualifications
+@inject LabResultService LabResults
+@inject LabResultImportService LabImport
 @inject MzDbContext Db
 
 <PageTitle>Karta przypadku</PageTitle>
@@ -169,6 +171,75 @@ else
         </div>
     </div>
 
+    <!-- WYNIKI / KONTROLA KOMPLETNOŚCI -->
+    @if (_e.Skierowanie is not null)
+    {
+        <div class="card my-3">
+            <div class="card-header d-flex justify-content-between">
+                <span>4. Wyniki i kontrola kompletności</span>
+                @if (_e.MaBrakiBadan)
+                {
+                    <span class="badge bg-warning text-dark">Braki badań</span>
+                }
+                else
+                {
+                    <span class="badge bg-success">Komplet</span>
+                }
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <thead>
+                        <tr><th>Badanie</th><th>Wynik</th><th>Norma</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var z in _e.Skierowanie.Zlecone.OrderBy(z => z.TestDefinition.Nazwa))
+                        {
+                            var w = _e.Wyniki.FirstOrDefault(r => r.TestDefinitionId == z.TestDefinitionId);
+                            <tr class="@(w is null ? "table-warning" : "")">
+                                <td>@z.TestDefinition.Nazwa</td>
+                                <td>@(w is null ? "—" : $"{w.WartoscLiczbowa?.ToString() ?? w.WartoscTekstowa} {w.Jednostka}")</td>
+                                <td>@OcenaTekst(w)</td>
+                                <td>@(w is null ? "⚠ brak" : "✔ wykonane")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <div class="row g-2 align-items-end border-top pt-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Dodaj wynik ręcznie — badanie</label>
+                        <select class="form-select" @bind="_wynikDef">
+                            <option value="">— wybierz —</option>
+                            @foreach (var z in _e.Skierowanie.Zlecone.OrderBy(z => z.TestDefinition.Nazwa))
+                            {
+                                <option value="@z.TestDefinitionId">@z.TestDefinition.Nazwa</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Wartość</label>
+                        <input class="form-control" @bind="_wynikWartosc" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Data wyniku</label>
+                        <input type="date" class="form-control" @bind="_wynikData" />
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-outline-primary w-100" @onclick="DodajWynik">Dodaj</button>
+                    </div>
+                </div>
+
+                <hr />
+                <label class="form-label">Import wyników z eLaborat (plik HL7 CDA XML)</label>
+                <InputFile OnChange="ImportujXml" accept=".xml" class="form-control" />
+                @if (_importPodsumowanie is not null)
+                {
+                    <div class="small text-muted mt-1">@_importPodsumowanie</div>
+                }
+            </div>
+        </div>
+    }
+
     <!-- HISTORIA -->
     <div class="card my-3">
         <div class="card-header">Historia statusów</div>
@@ -202,6 +273,12 @@ else
 
     private string? _uzasadnienie;
     private Guid? _laboratoriumId;
+
+    // Stan formularza wyników.
+    private string? _wynikDef;
+    private string? _wynikWartosc;
+    private DateOnly? _wynikData = DateOnly.FromDateTime(DateTime.Today);
+    private string? _importPodsumowanie;
 
     private static DateOnly Dzis => DateOnly.FromDateTime(DateTime.Today);
 
@@ -264,6 +341,44 @@ else
         {
             var s = await Qualifications.WystawSkierowanieAsync(Id, _laboratoriumId);
             _komunikat = $"Wystawiono skierowanie ({s.Zlecone.Count} badań).";
+        });
+    }
+
+    private static string OcenaTekst(TestResult? w) => w?.OcenaNormy switch
+    {
+        OcenaNormy.Norma => "w normie",
+        OcenaNormy.Ponizej => "⬇ poniżej",
+        OcenaNormy.Powyzej => "⬆ powyżej",
+        _ => "—"
+    };
+
+    private async Task DodajWynik()
+    {
+        if (!Guid.TryParse(_wynikDef, out var defId)) { _blad = "Wybierz badanie."; return; }
+        await Wykonaj(async () =>
+        {
+            decimal? liczba = decimal.TryParse(_wynikWartosc?.Replace(',', '.'),
+                System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var d)
+                ? d : null;
+            var tekst = liczba is null ? _wynikWartosc : null;
+            await LabResults.DodajRecznieAsync(Id, defId, liczba, tekst, _wynikData);
+            _komunikat = "Dodano wynik.";
+            _wynikDef = null; _wynikWartosc = null;
+        });
+    }
+
+    private async Task ImportujXml(InputFileChangeEventArgs e)
+    {
+        await Wykonaj(async () =>
+        {
+            var labId = _e!.Skierowanie!.LaboratoriumId ?? _laboratoria.FirstOrDefault()?.Id;
+            if (labId is null) { _blad = "Brak zdefiniowanego laboratorium."; return; }
+            await using var stream = e.File.OpenReadStream(20 * 1024 * 1024);
+            var wynik = await LabImport.ImportujAsync(stream, labId.Value);
+            _importPodsumowanie = $"Dokumentów: {wynik.Dokumentow}, dopasowanych: {wynik.Dopasowanych}, " +
+                $"zapisanych wyników: {wynik.ZapisanychWynikow}, niedopasowanych: {wynik.Niedopasowanych}." +
+                (wynik.Ostrzezenia.Count > 0 ? " Ostrzeżenia: " + string.Join("; ", wynik.Ostrzezenia) : "");
+            _komunikat = "Zaimportowano wyniki.";
         });
     }
 
