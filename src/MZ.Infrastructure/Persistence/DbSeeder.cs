@@ -66,6 +66,14 @@ public static class DbSeeder
         };
         db.ScoringRuleSets.Add(zestaw);
 
+        // Przykładowe laboratorium (integracja do zbadania — patrz plan).
+        db.Laboratories.Add(new Laboratory
+        {
+            Nazwa = "CM Medyk Łańcut",
+            TypIntegracji = TypIntegracjiLaboratorium.Brak,
+            Aktywny = true
+        });
+
         await db.SaveChangesAsync(ct);
     }
 

@@ -43,7 +43,7 @@ else
             @foreach (var e in _przypadki)
             {
                 <tr>
-                    <td>@e.Patient.Nazwisko @e.Patient.Imie</td>
+                    <td><a href="przypadek/@e.Id">@e.Patient.Nazwisko @e.Patient.Imie</a></td>
                     <td>@e.Status</td>
                     <td>@(e.TerminKontaktu?.ToString("yyyy-MM-dd") ?? "—")</td>
                     <td>@(e.MaBrakiBadan ? "⚠ tak" : "—")</td>

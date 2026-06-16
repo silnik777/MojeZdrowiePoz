@@ -22,3 +22,6 @@ artifacts/
 
 # Pliki tymczasowe
 [Tt]emp/
+
+# Wgrane skany ankiet (dane wrażliwe)
+uploads/

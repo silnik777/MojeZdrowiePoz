@@ -1,0 +1,284 @@
+@page "/przypadek/{Id:guid}"
+@using Microsoft.EntityFrameworkCore
+@using MZ.Application.Dtos
+@using MZ.Domain.Entities
+@using MZ.Domain.Enums
+@using MZ.Infrastructure.Persistence
+@using MZ.Infrastructure.Services
+@using MZ.Web.Kbzod
+@inject EnrollmentService Enrollments
+@inject QuestionnaireService Questionnaires
+@inject QualificationService Qualifications
+@inject MzDbContext Db
+
+<PageTitle>Karta przypadku</PageTitle>
+
+@if (_e is null)
+{
+    <p><em>Wczytywanie…</em></p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-start">
+        <div>
+            <h1>@_e.Patient.Nazwisko @_e.Patient.Imie</h1>
+            <div class="text-muted">
+                PESEL @_e.Patient.Pesel · wiek @_e.Patient.Wiek(Dzis) · @_e.Patient.Plec
+            </div>
+        </div>
+        <div class="text-end">
+            <span class="badge bg-primary fs-6">@_e.Status</span>
+            @if (_e.TerminKontaktu is not null)
+            {
+                <div class="small mt-1">Termin kontaktu: <strong>@_e.TerminKontaktu?.ToString("yyyy-MM-dd")</strong></div>
+            }
+        </div>
+    </div>
+
+    @if (_komunikat is not null)
+    {
+        <div class="alert alert-success">@_komunikat</div>
+    }
+    @if (_blad is not null)
+    {
+        <div class="alert alert-danger">@_blad</div>
+    }
+
+    <!-- ANKIETA -->
+    <div class="card my-3">
+        <div class="card-header d-flex justify-content-between">
+            <span>1. Ankieta KBZOD</span>
+            @if (_e.Ankieta?.Score is not null)
+            {
+                <span>Wynik (score): <strong>@_e.Ankieta.Score</strong></span>
+            }
+        </div>
+        <div class="card-body">
+            <div class="row mb-2">
+                <div class="col">
+                    <label class="form-label">Źródło</label>
+                    <select class="form-select" @bind="_zrodlo">
+                        @foreach (var z in Enum.GetValues<ZrodloAnkiety>())
+                        {
+                            <option value="@z">@z</option>
+                        }
+                    </select>
+                </div>
+                <div class="col">
+                    <label class="form-label">Data wpływu</label>
+                    <input type="date" class="form-control" @bind="_dataWplywu" />
+                </div>
+                <div class="col">
+                    <label class="form-label">Data wypełnienia</label>
+                    <input type="date" class="form-control" @bind="_dataWypelnienia" />
+                </div>
+            </div>
+
+            @foreach (var pyt in KbzodPytania.Lista)
+            {
+                <div class="mb-2">
+                    <label class="form-label">@pyt.Tresc</label>
+                    <select class="form-select" value="@Odp(pyt.Kod)" @onchange="e => UstawOdp(pyt.Kod, e.Value?.ToString())">
+                        <option value="">— brak —</option>
+                        @foreach (var o in pyt.Opcje)
+                        {
+                            <option value="@o">@o</option>
+                        }
+                    </select>
+                </div>
+            }
+
+            <div class="mb-2">
+                <label class="form-label">Notatki</label>
+                <textarea class="form-control" rows="2" @bind="_notatki"></textarea>
+            </div>
+            <button class="btn btn-primary" @onclick="ZapiszAnkiete">Zapisz ankietę i przelicz score</button>
+
+            <hr />
+            <label class="form-label">Wgraj skan ankiety (PDF) — OCR oznaczy do weryfikacji</label>
+            <div class="d-flex gap-2 align-items-center">
+                <InputFile OnChange="WgrajSkan" accept=".pdf" class="form-control" />
+            </div>
+            @if (_e.Ankieta?.StatusWeryfikacji == StatusWeryfikacjiOcr.OczekujeNaWeryfikacje)
+            {
+                <div class="alert alert-warning mt-2 mb-0">
+                    Wgrano skan — odczyt OCR wymaga ręcznej weryfikacji odpowiedzi.
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- KWALIFIKACJA -->
+    <div class="card my-3 @(_e.Ankieta is null ? "opacity-50" : "")">
+        <div class="card-header">2. Kwalifikacja</div>
+        <div class="card-body">
+            @if (_e.Ankieta is null)
+            {
+                <p class="text-muted mb-0">Najpierw zapisz ankietę.</p>
+            }
+            else if (_e.Kwalifikacja is not null)
+            {
+                <p>Decyzja: <strong>@_e.Kwalifikacja.Decyzja</strong> (@_e.Kwalifikacja.DataDecyzji.ToString("yyyy-MM-dd"))</p>
+                @if (_e.Kwalifikacja.CzynnikiRyzyka.Count > 0)
+                {
+                    <p class="mb-0">Czynniki ryzyka: @string.Join(", ", _e.Kwalifikacja.CzynnikiRyzyka)</p>
+                }
+            }
+            else
+            {
+                <textarea class="form-control mb-2" rows="2" placeholder="Uzasadnienie (opcjonalnie)" @bind="_uzasadnienie"></textarea>
+                <button class="btn btn-success" @onclick="() => Kwalifikuj(DecyzjaKwalifikacji.Zakwalifikowany)">Zakwalifikuj</button>
+                <button class="btn btn-outline-danger" @onclick="() => Kwalifikuj(DecyzjaKwalifikacji.Niezakwalifikowany)">Wyklucz</button>
+            }
+        </div>
+    </div>
+
+    <!-- SKIEROWANIE -->
+    <div class="card my-3 @(_e.Status < PipelineStatus.ZakwalifikowanyDoProgramu ? "opacity-50" : "")">
+        <div class="card-header">3. Skierowanie na badania</div>
+        <div class="card-body">
+            @if (_e.Skierowanie is not null)
+            {
+                <p>Wystawiono @_e.Skierowanie.DataWystawienia.ToString("yyyy-MM-dd")
+                    @(_e.Skierowanie.Laboratorium is not null ? $"· {_e.Skierowanie.Laboratorium.Nazwa}" : "")</p>
+                <ul>
+                    @foreach (var z in _e.Skierowanie.Zlecone.OrderBy(z => z.TestDefinition.Nazwa))
+                    {
+                        <li>@z.TestDefinition.Nazwa (@z.TestDefinition.Kod)</li>
+                    }
+                </ul>
+            }
+            else if (_e.Kwalifikacja?.Decyzja == DecyzjaKwalifikacji.Zakwalifikowany)
+            {
+                <div class="mb-2" style="max-width:400px">
+                    <label class="form-label">Laboratorium</label>
+                    <select class="form-select" @bind="_laboratoriumId">
+                        <option value="">— wybierz —</option>
+                        @foreach (var l in _laboratoria)
+                        {
+                            <option value="@l.Id">@l.Nazwa</option>
+                        }
+                    </select>
+                </div>
+                <button class="btn btn-primary" @onclick="WystawSkierowanie">Dobierz pakiet i wystaw skierowanie</button>
+            }
+            else
+            {
+                <p class="text-muted mb-0">Dostępne po zakwalifikowaniu pacjenta.</p>
+            }
+        </div>
+    </div>
+
+    <!-- HISTORIA -->
+    <div class="card my-3">
+        <div class="card-header">Historia statusów</div>
+        <div class="card-body">
+            <ul class="mb-0">
+                @foreach (var h in _e.Historia.OrderBy(h => h.DataPrzejscia))
+                {
+                    <li>@h.DataPrzejscia.LocalDateTime.ToString("yyyy-MM-dd HH:mm") — @(h.StatusZ?.ToString() ?? "(start)") → @h.StatusNa @(string.IsNullOrEmpty(h.Komentarz) ? "" : $"· {h.Komentarz}")</li>
+                }
+            </ul>
+        </div>
+    </div>
+
+    <a class="btn btn-link" href="pipeline">← Pipeline</a>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private ProgramEnrollment? _e;
+    private List<Laboratory> _laboratoria = new();
+    private string? _komunikat;
+    private string? _blad;
+
+    // Stan formularza ankiety.
+    private ZrodloAnkiety _zrodlo = ZrodloAnkiety.WprowadzonaRecznie;
+    private DateOnly _dataWplywu = DateOnly.FromDateTime(DateTime.Today);
+    private DateOnly? _dataWypelnienia;
+    private string? _notatki;
+    private readonly Dictionary<string, string?> _odp = new();
+
+    private string? _uzasadnienie;
+    private Guid? _laboratoriumId;
+
+    private static DateOnly Dzis => DateOnly.FromDateTime(DateTime.Today);
+
+    protected override async Task OnParametersSetAsync() => await Wczytaj();
+
+    private async Task Wczytaj()
+    {
+        _e = await Enrollments.PobierzZeSzczegolamiAsync(Id);
+        _laboratoria = await Db.Laboratories.AsNoTracking().Where(l => l.Aktywny).OrderBy(l => l.Nazwa).ToListAsync();
+        if (_e?.Ankieta is not null)
+        {
+            _zrodlo = _e.Ankieta.Zrodlo;
+            _dataWplywu = _e.Ankieta.DataWplywu;
+            _dataWypelnienia = _e.Ankieta.DataWypelnienia;
+            _notatki = _e.Ankieta.Notatki;
+            _odp.Clear();
+            foreach (var o in _e.Ankieta.Odpowiedzi)
+                _odp[o.KodPytania] = o.Wartosc;
+        }
+    }
+
+    private string Odp(string kod) => _odp.TryGetValue(kod, out var v) ? v ?? "" : "";
+    private void UstawOdp(string kod, string? wartosc) => _odp[kod] = wartosc;
+
+    private async Task ZapiszAnkiete()
+    {
+        await Wykonaj(async () =>
+        {
+            var input = new QuestionnaireInput(_zrodlo, _dataWypelnienia, _dataWplywu,
+                _odp.Where(kv => !string.IsNullOrWhiteSpace(kv.Value)).ToDictionary(kv => kv.Key, kv => kv.Value!),
+                _notatki);
+            var wynik = await Questionnaires.ZapiszAsync(Id, input);
+            _komunikat = $"Zapisano ankietę. Score: {wynik.Score}." +
+                (wynik.CzynnikiRyzyka.Count > 0 ? $" Czynniki ryzyka: {string.Join(", ", wynik.CzynnikiRyzyka)}." : "");
+        });
+    }
+
+    private async Task WgrajSkan(InputFileChangeEventArgs e)
+    {
+        await Wykonaj(async () =>
+        {
+            await using var stream = e.File.OpenReadStream(20 * 1024 * 1024);
+            await Questionnaires.WgrajSkanAsync(Id, stream, e.File.Name);
+            _komunikat = "Wgrano skan ankiety.";
+        });
+    }
+
+    private async Task Kwalifikuj(DecyzjaKwalifikacji decyzja)
+    {
+        await Wykonaj(async () =>
+        {
+            await Qualifications.KwalifikujAsync(Id, decyzja, _uzasadnienie);
+            _komunikat = $"Zapisano kwalifikację: {decyzja}.";
+        });
+    }
+
+    private async Task WystawSkierowanie()
+    {
+        await Wykonaj(async () =>
+        {
+            var s = await Qualifications.WystawSkierowanieAsync(Id, _laboratoriumId);
+            _komunikat = $"Wystawiono skierowanie ({s.Zlecone.Count} badań).";
+        });
+    }
+
+    private async Task Wykonaj(Func<Task> akcja)
+    {
+        _komunikat = null;
+        _blad = null;
+        try
+        {
+            await akcja();
+            await Wczytaj();
+        }
+        catch (Exception ex)
+        {
+            _blad = ex.Message;
+        }
+    }
+}

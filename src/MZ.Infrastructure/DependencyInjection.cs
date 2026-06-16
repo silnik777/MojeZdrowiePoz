@@ -5,7 +5,9 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using MZ.Application.Abstractions;
 using MZ.Application.Services;
 using MZ.Infrastructure.Identity;
+using MZ.Infrastructure.Ocr;
 using MZ.Infrastructure.Persistence;
+using MZ.Infrastructure.Services;
 
 namespace MZ.Infrastructure;
 
@@ -41,6 +43,15 @@ public static class DependencyInjection
         services.AddScoped<ScoringService>();
         services.AddScoped<PackageSelectionService>();
         services.AddScoped<CompletenessService>();
+
+        // Adaptery (na razie zaślepka OCR — docelowo silnik OCR/OMR przetwarzający lokalnie).
+        services.AddScoped<IOcrService, StubOcrService>();
+
+        // Serwisy aplikacyjne Fazy 1 (orkiestracja na EF Core).
+        services.AddScoped<PatientService>();
+        services.AddScoped<EnrollmentService>();
+        services.AddScoped<QuestionnaireService>();
+        services.AddScoped<QualificationService>();
 
         return services;
     }
