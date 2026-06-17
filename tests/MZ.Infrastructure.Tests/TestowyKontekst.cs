@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using MZ.Application.Abstractions;
 using MZ.Application.Services;
 using MZ.Domain.Enums;
+using Microsoft.Extensions.Configuration;
+using MZ.Infrastructure.Documents;
 using MZ.Infrastructure.Lab;
 using MZ.Infrastructure.Ocr;
 using MZ.Infrastructure.Persistence;
@@ -26,6 +28,10 @@ public sealed class TestowyKontekst : IDisposable
     public SmsService Sms { get; }
     public NotificationService Notifications { get; }
     public FakeSmsGateway Gateway { get; }
+    public VisitService Visits { get; }
+    public DocumentService Documents { get; }
+
+    private readonly string _docsFolder = Path.Combine(Path.GetTempPath(), "mz_docs_" + Guid.NewGuid().ToString("N"));
 
     public TestowyKontekst()
     {
@@ -41,7 +47,9 @@ public sealed class TestowyKontekst : IDisposable
         var scoring = new ScoringService();
         var packages = new PackageSelectionService();
         var completeness = new CompletenessService();
-        var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
+        var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Storage:DocumentsPath"] = _docsFolder })
+            .Build();
 
         Patients = new PatientService(Db, audit);
         Enrollments = new EnrollmentService(Db, audit, time);
@@ -53,12 +61,15 @@ public sealed class TestowyKontekst : IDisposable
         Gateway = new FakeSmsGateway();
         Sms = new SmsService(Db, Gateway, audit, time, config);
         Notifications = new NotificationService(Db, time);
+        Visits = new VisitService(Db, Enrollments, audit);
+        Documents = new DocumentService(Db, audit, time, config);
     }
 
     public void Dispose()
     {
         Db.Dispose();
         _conn.Dispose();
+        try { if (Directory.Exists(_docsFolder)) Directory.Delete(_docsFolder, true); } catch { /* ignore */ }
     }
 
     private sealed class NoopAudit : IAuditService

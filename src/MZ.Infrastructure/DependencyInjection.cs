@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using MZ.Application.Abstractions;
 using MZ.Application.Services;
+using MZ.Infrastructure.Documents;
 using MZ.Infrastructure.Identity;
 using MZ.Infrastructure.Lab;
 using MZ.Infrastructure.Notifications;
@@ -73,6 +74,10 @@ public static class DependencyInjection
         services.AddScoped<SmsService>();
         services.AddScoped<NotificationService>();
         services.AddHostedService<ReminderDispatcher>();
+
+        // Faza 4: wizyta, IPZ, dokumenty PDF.
+        services.AddScoped<VisitService>();
+        services.AddScoped<DocumentService>();
 
         return services;
     }

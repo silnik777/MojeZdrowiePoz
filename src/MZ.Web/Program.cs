@@ -48,6 +48,16 @@ app.UseAntiforgery();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
+// Pobieranie wygenerowanych dokumentów PDF (dostęp chroniony uwierzytelnianiem Windows na IIS).
+app.MapGet("/dokument/{id:guid}", async (Guid id, MZ.Infrastructure.Documents.DocumentService docs) =>
+{
+    var d = await docs.PobierzAsync(id);
+    if (d is null || string.IsNullOrEmpty(d.PlikSciezka) || !File.Exists(d.PlikSciezka))
+        return Results.NotFound();
+    var bytes = await File.ReadAllBytesAsync(d.PlikSciezka);
+    return Results.File(bytes, "application/pdf", Path.GetFileName(d.PlikSciezka));
+});
+
 await InicjalizujBazeAsync(app);
 
 app.Run();

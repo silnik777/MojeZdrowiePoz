@@ -23,5 +23,6 @@ artifacts/
 # Pliki tymczasowe
 [Tt]emp/
 
-# Wgrane skany ankiet (dane wrażliwe)
+# Wgrane skany ankiet i dokumenty (dane wrażliwe)
 uploads/
+dokumenty/

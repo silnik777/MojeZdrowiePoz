@@ -3,6 +3,7 @@
 @using MZ.Application.Dtos
 @using MZ.Domain.Entities
 @using MZ.Domain.Enums
+@using MZ.Infrastructure.Documents
 @using MZ.Infrastructure.Persistence
 @using MZ.Infrastructure.Services
 @using MZ.Web.Kbzod
@@ -13,6 +14,8 @@
 @inject LabResultImportService LabImport
 @inject AppointmentService Appointments
 @inject SmsService Sms
+@inject VisitService Visits
+@inject DocumentService Documents
 @inject MzDbContext Db
 
 <PageTitle>Karta przypadku</PageTitle>
@@ -317,6 +320,98 @@ else
         </div>
     </div>
 
+    <!-- WIZYTA + IPZ + DOKUMENTY -->
+    <div class="card my-3">
+        <div class="card-header d-flex justify-content-between">
+            <span>6. Wizyta podsumowująca i IPZ</span>
+            @if (_e.Wizyta is not null)
+            {
+                <span>BMI: <strong>@(_e.Wizyta.Bmi?.ToString() ?? "—")</strong></span>
+            }
+        </div>
+        <div class="card-body">
+            <div class="row g-2">
+                <div class="col-md-3"><label class="form-label">Data wizyty</label>
+                    <input type="date" class="form-control" @bind="_wizData" /></div>
+                <div class="col-md-3"><label class="form-label">Ciśnienie skurcz./rozkurcz.</label>
+                    <div class="d-flex gap-1">
+                        <input class="form-control" placeholder="skurcz." @bind="_skurcz" />
+                        <input class="form-control" placeholder="rozkurcz." @bind="_rozkurcz" />
+                    </div></div>
+                <div class="col-md-2"><label class="form-label">Tętno</label>
+                    <input class="form-control" @bind="_tetno" /></div>
+                <div class="col-md-2"><label class="form-label">Wzrost [cm]</label>
+                    <input class="form-control" @bind="_wzrost" /></div>
+                <div class="col-md-2"><label class="form-label">Waga [kg]</label>
+                    <input class="form-control" @bind="_waga" /></div>
+            </div>
+            <div class="row g-2 mt-1">
+                <div class="col-md-3"><label class="form-label">Obwód talii [cm]</label>
+                    <input class="form-control" @bind="_talia" /></div>
+                <div class="col-md-9"><label class="form-label">Podsumowanie wyników / zalecenia</label>
+                    <input class="form-control" @bind="_wizZalecenia" /></div>
+            </div>
+            <button class="btn btn-primary mt-2" @onclick="ZapiszWizyte">Zapisz wizytę</button>
+
+            @if (_e.Wizyta is not null)
+            {
+                <hr />
+                <h6>Indywidualny Plan Zdrowotny (IPZ)</h6>
+                <div class="row g-2">
+                    <div class="col-md-6"><label class="form-label">Cele (po jednym w wierszu)</label>
+                        <textarea class="form-control" rows="3" @bind="_cele"></textarea></div>
+                    <div class="col-md-6"><label class="form-label">Interwencje (po jednej w wierszu)</label>
+                        <textarea class="form-control" rows="3" @bind="_interwencje"></textarea></div>
+                </div>
+                <div class="row g-2 mt-1">
+                    <div class="col-md-6"><label class="form-label">Zalecenia szczepień</label>
+                        <input class="form-control" @bind="_szczepienia" /></div>
+                    <div class="col-md-6"><label class="form-label">Dalsza diagnostyka</label>
+                        <input class="form-control" @bind="_diagnostyka" /></div>
+                </div>
+                <button class="btn btn-primary mt-2" @onclick="ZapiszIpz">Zapisz IPZ</button>
+
+                <hr />
+                <div class="d-flex gap-2 flex-wrap">
+                    <button class="btn btn-outline-secondary" @onclick="GenerujIpz">Generuj IPZ (PDF)</button>
+                    <button class="btn btn-outline-secondary" @onclick="GenerujSkierowanie">Generuj skierowanie (PDF)</button>
+                    @if (_e.Status == PipelineStatus.WizytaZrealizowana)
+                    {
+                        <button class="btn btn-success" @onclick="DoRozliczenia">Przekaż do rozliczenia</button>
+                    }
+                </div>
+            }
+
+            @if (_dokumenty.Any())
+            {
+                <table class="table table-sm mt-3">
+                    <thead><tr><th>Dokument</th><th>Podpis</th><th></th><th>Wgraj podpisany</th></tr></thead>
+                    <tbody>
+                        @foreach (var d in _dokumenty)
+                        {
+                            <tr>
+                                <td>@d.Typ</td>
+                                <td>@(d.Podpisany ? d.TypPodpisu.ToString() : "niepodpisany")</td>
+                                <td><a class="btn btn-sm btn-outline-primary" href="dokument/@d.Id" target="_blank">Pobierz</a></td>
+                                <td>
+                                    <div class="d-flex gap-1">
+                                        <select class="form-select form-select-sm" @bind="_typPodpisu">
+                                            @foreach (var tp in Enum.GetValues<TypPodpisu>().Where(x => x != TypPodpisu.Brak))
+                                            {
+                                                <option value="@tp">@tp</option>
+                                            }
+                                        </select>
+                                        <InputFile OnChange="@(e => WgrajPodpisany(e, d.Id))" accept=".pdf" class="form-control form-control-sm" />
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+
     <!-- HISTORIA -->
     <div class="card my-3">
         <div class="card-header">Historia statusów</div>
@@ -363,6 +458,13 @@ else
     private string? _terminLab;
     private List<SmsMessage> _smsHistoria = new();
 
+    // Stan wizyty / IPZ / dokumentów.
+    private DateOnly _wizData = DateOnly.FromDateTime(DateTime.Today);
+    private string? _skurcz, _rozkurcz, _tetno, _wzrost, _waga, _talia, _wizZalecenia;
+    private string? _cele, _interwencje, _szczepienia, _diagnostyka;
+    private List<SignedDocument> _dokumenty = new();
+    private TypPodpisu _typPodpisu = TypPodpisu.ProfilZaufany;
+
     private static DateOnly Dzis => DateOnly.FromDateTime(DateTime.Today);
 
     protected override async Task OnParametersSetAsync() => await Wczytaj();
@@ -372,6 +474,26 @@ else
         _e = await Enrollments.PobierzZeSzczegolamiAsync(Id);
         _laboratoria = await Db.Laboratories.AsNoTracking().Where(l => l.Aktywny).OrderBy(l => l.Nazwa).ToListAsync();
         _smsHistoria = _e is null ? new() : await Sms.HistoriaAsync(Id);
+        _dokumenty = _e is null ? new() : await Documents.ListaAsync(Id);
+        if (_e?.Wizyta is not null)
+        {
+            var v = _e.Wizyta;
+            _wizData = v.DataWizyty;
+            _skurcz = v.CisnienieSkurczowe?.ToString();
+            _rozkurcz = v.CisnienieRozkurczowe?.ToString();
+            _tetno = v.Tetno?.ToString();
+            _wzrost = v.WzrostCm?.ToString();
+            _waga = v.WagaKg?.ToString();
+            _talia = v.ObwodTaliiCm?.ToString();
+            _wizZalecenia = v.Zalecenia;
+            if (v.Ipz is not null)
+            {
+                _cele = string.Join('\n', v.Ipz.Cele);
+                _interwencje = string.Join('\n', v.Ipz.Interwencje);
+                _szczepienia = v.Ipz.ZaleceniaSzczepien;
+                _diagnostyka = v.Ipz.DalszaDiagnostyka;
+            }
+        }
         if (_e?.Ankieta is not null)
         {
             _zrodlo = _e.Ankieta.Zrodlo;
@@ -484,6 +606,60 @@ else
             _komunikat = proba.Info;
         });
     }
+
+    private async Task ZapiszWizyte()
+    {
+        await Wykonaj(async () =>
+        {
+            var input = new VisitInput(_wizData, Cint(_skurcz), Cint(_rozkurcz), Cint(_tetno),
+                Cdbl(_wzrost), Cdbl(_waga), Cdbl(_talia), null, _wizZalecenia);
+            await Visits.ZapiszWizyteAsync(Id, input);
+            _komunikat = "Zapisano wizytę.";
+        });
+    }
+
+    private async Task ZapiszIpz()
+    {
+        await Wykonaj(async () =>
+        {
+            var input = new IpzInput(Linie(_cele), Linie(_interwencje), _szczepienia, _diagnostyka, null);
+            await Visits.ZapiszIpzAsync(Id, input);
+            _komunikat = "Zapisano IPZ.";
+        });
+    }
+
+    private async Task GenerujIpz() => await Wykonaj(async () =>
+    {
+        await Documents.GenerujIpzAsync(Id);
+        _komunikat = "Wygenerowano PDF z IPZ.";
+    });
+
+    private async Task GenerujSkierowanie() => await Wykonaj(async () =>
+    {
+        await Documents.GenerujSkierowanieAsync(Id);
+        _komunikat = "Wygenerowano PDF skierowania.";
+    });
+
+    private async Task DoRozliczenia() => await Wykonaj(async () =>
+    {
+        await Visits.PrzekazDoRozliczeniaAsync(Id);
+        _komunikat = "Przekazano do rozliczenia.";
+    });
+
+    private async Task WgrajPodpisany(InputFileChangeEventArgs e, Guid documentId) => await Wykonaj(async () =>
+    {
+        await using var stream = e.File.OpenReadStream(20 * 1024 * 1024);
+        await Documents.WgrajPodpisanyAsync(documentId, stream, _typPodpisu);
+        _komunikat = "Wgrano podpisany dokument.";
+    });
+
+    private static int? Cint(string? s) => int.TryParse(s, out var v) ? v : null;
+    private static double? Cdbl(string? s) =>
+        double.TryParse(s?.Replace(',', '.'), System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : null;
+    private static List<string> Linie(string? s) =>
+        string.IsNullOrWhiteSpace(s) ? new()
+            : s.Split('\n').Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
 
     private async Task Wykonaj(Func<Task> akcja)
     {

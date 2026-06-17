@@ -73,9 +73,8 @@ public class SmsService
         return new SmsProba(wynik.Sukces, wynik.Sukces ? "Wysłano SMS." : $"Błąd: {wynik.Blad}");
     }
 
-    public Task<List<SmsMessage>> HistoriaAsync(Guid enrollmentId, CancellationToken ct = default) =>
-        _db.SmsMessages.AsNoTracking()
-            .Where(s => s.EnrollmentId == enrollmentId)
-            .OrderByDescending(s => s.UtworzonoUtc)
-            .ToListAsync(ct);
+    public async Task<List<SmsMessage>> HistoriaAsync(Guid enrollmentId, CancellationToken ct = default) =>
+        // Sortowanie po stronie pamięci — SQLite nie obsługuje ORDER BY po DateTimeOffset.
+        (await _db.SmsMessages.AsNoTracking().Where(s => s.EnrollmentId == enrollmentId).ToListAsync(ct))
+            .OrderByDescending(s => s.UtworzonoUtc).ToList();
 }
