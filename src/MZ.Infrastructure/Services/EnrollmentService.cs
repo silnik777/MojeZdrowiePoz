@@ -57,6 +57,7 @@ public class EnrollmentService
             .Include(e => e.Skierowanie!).ThenInclude(s => s.Zlecone).ThenInclude(z => z.TestDefinition)
             .Include(e => e.Skierowanie!).ThenInclude(s => s.Laboratorium)
             .Include(e => e.Wyniki).ThenInclude(w => w.TestDefinition)
+            .Include(e => e.Terminy).ThenInclude(t => t.Laboratorium)
             .Include(e => e.Historia)
             .FirstOrDefaultAsync(e => e.Id == id, ct);
 

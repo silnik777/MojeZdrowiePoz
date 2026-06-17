@@ -11,6 +11,8 @@
 @inject QualificationService Qualifications
 @inject LabResultService LabResults
 @inject LabResultImportService LabImport
+@inject AppointmentService Appointments
+@inject SmsService Sms
 @inject MzDbContext Db
 
 <PageTitle>Karta przypadku</PageTitle>
@@ -240,6 +242,81 @@ else
         </div>
     }
 
+    <!-- TERMINY I POWIADOMIENIA -->
+    <div class="card my-3">
+        <div class="card-header">5. Terminy i powiadomienia SMS</div>
+        <div class="card-body">
+            @if (!_e.Patient.ZgodaSms)
+            {
+                <div class="alert alert-secondary py-1">Pacjent nie wyraził zgody na SMS — powiadomienia nie będą wysyłane.</div>
+            }
+
+            @if (_e.Terminy.Any())
+            {
+                <table class="table table-sm">
+                    <thead><tr><th>Typ</th><th>Termin</th><th>Laboratorium</th><th>Status</th></tr></thead>
+                    <tbody>
+                        @foreach (var t in _e.Terminy.OrderBy(t => t.DataGodzina))
+                        {
+                            <tr>
+                                <td>@t.Typ</td>
+                                <td>@t.DataGodzina.LocalDateTime.ToString("dd.MM.yyyy HH:mm")</td>
+                                <td>@(t.Laboratorium?.Nazwa ?? "—")</td>
+                                <td>@t.Status</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+
+            <div class="row g-2 align-items-end border-top pt-3">
+                <div class="col-md-3">
+                    <label class="form-label">Typ terminu</label>
+                    <select class="form-select" @bind="_terminTyp">
+                        @foreach (var t in Enum.GetValues<TypTerminu>())
+                        {
+                            <option value="@t">@t</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Data i godzina</label>
+                    <input type="datetime-local" class="form-control" @bind="_terminData" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Laboratorium</label>
+                    <select class="form-select" @bind="_terminLab">
+                        <option value="">— brak —</option>
+                        @foreach (var l in _laboratoria)
+                        {
+                            <option value="@l.Id">@l.Nazwa</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-outline-primary w-100" @onclick="Umow">Umów termin</button>
+                </div>
+            </div>
+
+            <hr />
+            <div class="d-flex gap-2 flex-wrap">
+                <button class="btn btn-sm btn-outline-success" @onclick="@(() => WyslijSms(TypPowiadomienia.WynikiGotowe))">SMS: wyniki gotowe</button>
+                <button class="btn btn-sm btn-outline-success" @onclick="@(() => WyslijSms(TypPowiadomienia.ZaproszenieNaWizyte))">SMS: zaproszenie na wizytę</button>
+                <button class="btn btn-sm btn-outline-success" @onclick="@(() => WyslijSms(TypPowiadomienia.KontaktTerminowy30Dni))">SMS: prośba o kontakt</button>
+            </div>
+
+            @if (_smsHistoria.Any())
+            {
+                <ul class="mt-3 small mb-0">
+                    @foreach (var s in _smsHistoria)
+                    {
+                        <li>@s.UtworzonoUtc.LocalDateTime.ToString("dd.MM HH:mm") — @s.Typ — @s.Status @(string.IsNullOrEmpty(s.BladOpis) ? "" : $"({s.BladOpis})")</li>
+                    }
+                </ul>
+            }
+        </div>
+    </div>
+
     <!-- HISTORIA -->
     <div class="card my-3">
         <div class="card-header">Historia statusów</div>
@@ -280,6 +357,12 @@ else
     private DateOnly? _wynikData = DateOnly.FromDateTime(DateTime.Today);
     private string? _importPodsumowanie;
 
+    // Stan terminarza / SMS.
+    private TypTerminu _terminTyp = TypTerminu.PobranieBadan;
+    private DateTime _terminData = DateTime.Today.AddDays(1).AddHours(9);
+    private string? _terminLab;
+    private List<SmsMessage> _smsHistoria = new();
+
     private static DateOnly Dzis => DateOnly.FromDateTime(DateTime.Today);
 
     protected override async Task OnParametersSetAsync() => await Wczytaj();
@@ -288,6 +371,7 @@ else
     {
         _e = await Enrollments.PobierzZeSzczegolamiAsync(Id);
         _laboratoria = await Db.Laboratories.AsNoTracking().Where(l => l.Aktywny).OrderBy(l => l.Nazwa).ToListAsync();
+        _smsHistoria = _e is null ? new() : await Sms.HistoriaAsync(Id);
         if (_e?.Ankieta is not null)
         {
             _zrodlo = _e.Ankieta.Zrodlo;
@@ -379,6 +463,25 @@ else
                 $"zapisanych wyników: {wynik.ZapisanychWynikow}, niedopasowanych: {wynik.Niedopasowanych}." +
                 (wynik.Ostrzezenia.Count > 0 ? " Ostrzeżenia: " + string.Join("; ", wynik.Ostrzezenia) : "");
             _komunikat = "Zaimportowano wyniki.";
+        });
+    }
+
+    private async Task Umow()
+    {
+        await Wykonaj(async () =>
+        {
+            Guid? labId = Guid.TryParse(_terminLab, out var g) ? g : null;
+            await Appointments.UmowAsync(Id, _terminTyp, new DateTimeOffset(_terminData), labId);
+            _komunikat = "Umówiono termin (utworzono przypomnienie).";
+        });
+    }
+
+    private async Task WyslijSms(TypPowiadomienia typ)
+    {
+        await Wykonaj(async () =>
+        {
+            var proba = await Sms.WyslijDoPacjentaAsync(Id, typ);
+            _komunikat = proba.Info;
         });
     }
 

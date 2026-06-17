@@ -6,9 +6,11 @@ using MZ.Application.Abstractions;
 using MZ.Application.Services;
 using MZ.Infrastructure.Identity;
 using MZ.Infrastructure.Lab;
+using MZ.Infrastructure.Notifications;
 using MZ.Infrastructure.Ocr;
 using MZ.Infrastructure.Persistence;
 using MZ.Infrastructure.Services;
+using MZ.Infrastructure.Sms;
 
 namespace MZ.Infrastructure;
 
@@ -63,6 +65,14 @@ public static class DependencyInjection
 
         // Nasłuch folderu eksportu eLaborat (aktywny tylko gdy skonfigurowano ELaborat:WatchFolder).
         services.AddHostedService<ELaboratFolderWatcher>();
+
+        // Faza 3: terminarz, powiadomienia, bramka SMS (SMS Gate na Androidzie, tryb lokalny).
+        services.AddHttpClient();
+        services.AddScoped<ISmsGateway, SmsGateGateway>();
+        services.AddScoped<AppointmentService>();
+        services.AddScoped<SmsService>();
+        services.AddScoped<NotificationService>();
+        services.AddHostedService<ReminderDispatcher>();
 
         return services;
     }

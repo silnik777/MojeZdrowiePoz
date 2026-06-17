@@ -1,0 +1,43 @@
+@page "/terminarz"
+@using MZ.Domain.Entities
+@using MZ.Infrastructure.Services
+@inject AppointmentService Appointments
+
+<PageTitle>Terminarz</PageTitle>
+
+<h1>Terminarz</h1>
+<p>Nadchodzące terminy pobrań badań i wizyt podsumowujących (najbliższe 30 dni).</p>
+
+@if (_terminy is null)
+{
+    <p><em>Wczytywanie…</em></p>
+}
+else if (_terminy.Count == 0)
+{
+    <div class="alert alert-info">Brak zaplanowanych terminów.</div>
+}
+else
+{
+    <table class="table table-sm">
+        <thead><tr><th>Termin</th><th>Typ</th><th>Pacjent</th><th>Laboratorium</th><th></th></tr></thead>
+        <tbody>
+            @foreach (var t in _terminy)
+            {
+                <tr>
+                    <td>@t.DataGodzina.LocalDateTime.ToString("dd.MM.yyyy HH:mm")</td>
+                    <td>@t.Typ</td>
+                    <td>@t.Enrollment.Patient.Nazwisko @t.Enrollment.Patient.Imie</td>
+                    <td>@(t.Laboratorium?.Nazwa ?? "—")</td>
+                    <td><a class="btn btn-sm btn-outline-primary" href="przypadek/@t.EnrollmentId">Otwórz</a></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Appointment>? _terminy;
+
+    protected override async Task OnInitializedAsync() =>
+        _terminy = await Appointments.NadchodzaceAsync();
+}

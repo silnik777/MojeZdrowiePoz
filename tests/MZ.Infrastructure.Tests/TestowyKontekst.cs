@@ -22,6 +22,10 @@ public sealed class TestowyKontekst : IDisposable
     public QualificationService Qualifications { get; }
     public LabResultImportService LabImport { get; }
     public LabResultService LabResults { get; }
+    public AppointmentService Appointments { get; }
+    public SmsService Sms { get; }
+    public NotificationService Notifications { get; }
+    public FakeSmsGateway Gateway { get; }
 
     public TestowyKontekst()
     {
@@ -45,6 +49,10 @@ public sealed class TestowyKontekst : IDisposable
         Qualifications = new QualificationService(Db, scoring, packages, Enrollments, audit, time);
         LabImport = new LabResultImportService(Db, new ELaboratCdaAdapter(), completeness, Enrollments, audit);
         LabResults = new LabResultService(Db, completeness, LabImport, audit);
+        Appointments = new AppointmentService(Db, Enrollments, audit, time);
+        Gateway = new FakeSmsGateway();
+        Sms = new SmsService(Db, Gateway, audit, time, config);
+        Notifications = new NotificationService(Db, time);
     }
 
     public void Dispose()
@@ -57,5 +65,17 @@ public sealed class TestowyKontekst : IDisposable
     {
         public Task ZapiszAsync(AkcjaAudytu akcja, string encja, string? encjaId = null, Guid? patientId = null,
             string? szczegolyJson = null, CancellationToken ct = default) => Task.CompletedTask;
+    }
+}
+
+/// <summary>Atrapa bramki SMS — zapamiętuje wysłane wiadomości, zawsze zwraca sukces.</summary>
+public sealed class FakeSmsGateway : ISmsGateway
+{
+    public List<(string Numer, string Tresc)> Wyslane { get; } = new();
+
+    public Task<MZ.Application.Dtos.SmsWynikDto> WyslijAsync(string numerTelefonu, string tresc, CancellationToken ct = default)
+    {
+        Wyslane.Add((numerTelefonu, tresc));
+        return Task.FromResult(new MZ.Application.Dtos.SmsWynikDto(true, "fake-1", null));
     }
 }
