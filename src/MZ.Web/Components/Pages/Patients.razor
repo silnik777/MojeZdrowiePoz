@@ -1,0 +1,65 @@
+@page "/pacjenci"
+@using MZ.Domain.Entities
+@using MZ.Infrastructure.Services
+@inject PatientService PatientSvc
+@inject EnrollmentService Enrollments
+@inject NavigationManager Nav
+
+<PageTitle>Pacjenci</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Pacjenci</h1>
+    <a class="btn btn-primary" href="pacjenci/nowy">+ Nowy pacjent</a>
+</div>
+
+<div class="input-group mb-3" style="max-width:400px">
+    <input class="form-control" placeholder="Szukaj (nazwisko, imię, PESEL)" @bind="_szukaj" @bind:event="oninput" />
+    <button class="btn btn-outline-secondary" @onclick="Odswiez">Szukaj</button>
+</div>
+
+@if (_lista is null)
+{
+    <p><em>Wczytywanie…</em></p>
+}
+else if (_lista.Count == 0)
+{
+    <div class="alert alert-info">Brak pacjentów. Dodaj pierwszego pacjenta.</div>
+}
+else
+{
+    <table class="table table-sm table-hover">
+        <thead>
+            <tr><th>Nazwisko i imię</th><th>PESEL</th><th>Wiek</th><th>Telefon</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var p in _lista)
+            {
+                <tr>
+                    <td>@p.Nazwisko @p.Imie</td>
+                    <td>@p.Pesel</td>
+                    <td>@p.Wiek(DateOnly.FromDateTime(DateTime.Today))</td>
+                    <td>@p.Telefon</td>
+                    <td class="text-end">
+                        <a class="btn btn-sm btn-outline-secondary" href="pacjenci/@p.Id/edycja">Edytuj</a>
+                        <button class="btn btn-sm btn-outline-primary" @onclick="() => NowyPrzypadek(p.Id)">Nowy przypadek</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Patient>? _lista;
+    private string? _szukaj;
+
+    protected override Task OnInitializedAsync() => Odswiez();
+
+    private async Task Odswiez() => _lista = await PatientSvc.ListaAsync(_szukaj);
+
+    private async Task NowyPrzypadek(Guid patientId)
+    {
+        var e = await Enrollments.UtworzAsync(patientId);
+        Nav.NavigateTo($"przypadek/{e.Id}");
+    }
+}

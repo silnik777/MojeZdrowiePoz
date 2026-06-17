@@ -1,0 +1,119 @@
+@page "/pacjenci/nowy"
+@page "/pacjenci/{Id:guid}/edycja"
+@using MZ.Application.Dtos
+@using MZ.Domain.Enums
+@using MZ.Infrastructure.Services
+@inject PatientService Patients
+@inject NavigationManager Nav
+
+<PageTitle>@(Id is null ? "Nowy pacjent" : "Edycja pacjenta")</PageTitle>
+
+<h1>@(Id is null ? "Nowy pacjent" : "Edycja pacjenta")</h1>
+
+@if (_blad is not null)
+{
+    <div class="alert alert-danger">@_blad</div>
+}
+
+<EditForm Model="_model" OnValidSubmit="Zapisz" style="max-width:600px">
+    <DataAnnotationsValidator />
+    <div class="mb-2">
+        <label class="form-label">PESEL</label>
+        <InputText class="form-control" @bind-Value="_model.Pesel" />
+    </div>
+    <div class="row">
+        <div class="col mb-2">
+            <label class="form-label">Imię</label>
+            <InputText class="form-control" @bind-Value="_model.Imie" />
+        </div>
+        <div class="col mb-2">
+            <label class="form-label">Nazwisko</label>
+            <InputText class="form-control" @bind-Value="_model.Nazwisko" />
+        </div>
+    </div>
+    <div class="row">
+        <div class="col mb-2">
+            <label class="form-label">Data urodzenia</label>
+            <InputDate class="form-control" @bind-Value="_model.DataUrodzenia" />
+        </div>
+        <div class="col mb-2">
+            <label class="form-label">Płeć</label>
+            <InputSelect class="form-select" @bind-Value="_model.Plec">
+                @foreach (var p in Enum.GetValues<Plec>())
+                {
+                    <option value="@p">@p</option>
+                }
+            </InputSelect>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col mb-2">
+            <label class="form-label">Telefon</label>
+            <InputText class="form-control" @bind-Value="_model.Telefon" />
+        </div>
+        <div class="col mb-2">
+            <label class="form-label">E-mail</label>
+            <InputText class="form-control" @bind-Value="_model.Email" />
+        </div>
+    </div>
+    <div class="mb-2">
+        <label class="form-label">Data ostatniego bilansu (opcjonalnie)</label>
+        <InputDate class="form-control" @bind-Value="_model.DataOstatniegoBilansu" />
+    </div>
+    <div class="form-check mb-3">
+        <InputCheckbox class="form-check-input" id="zgoda" @bind-Value="_model.ZgodaSms" />
+        <label class="form-check-label" for="zgoda">Zgoda na powiadomienia SMS</label>
+    </div>
+    <button type="submit" class="btn btn-primary">Zapisz</button>
+    <a class="btn btn-link" href="pacjenci">Anuluj</a>
+</EditForm>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private PatientForm _model = new();
+    private string? _blad;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Id is null) return;
+        var p = await Patients.PobierzAsync(Id.Value);
+        if (p is null) { _blad = "Nie znaleziono pacjenta."; return; }
+        _model = new PatientForm
+        {
+            Pesel = p.Pesel, Imie = p.Imie, Nazwisko = p.Nazwisko,
+            DataUrodzenia = p.DataUrodzenia, Plec = p.Plec, Telefon = p.Telefon,
+            Email = p.Email, ZgodaSms = p.ZgodaSms, DataOstatniegoBilansu = p.DataOstatniegoBilansu
+        };
+    }
+
+    private async Task Zapisz()
+    {
+        _blad = null;
+        var input = new PatientInput(_model.Pesel, _model.Imie, _model.Nazwisko, _model.DataUrodzenia,
+            _model.Plec, _model.Telefon, _model.Email, _model.ZgodaSms, _model.DataOstatniegoBilansu);
+        try
+        {
+            if (Id is null) await Patients.UtworzAsync(input);
+            else await Patients.AktualizujAsync(Id.Value, input);
+            Nav.NavigateTo("pacjenci");
+        }
+        catch (Exception ex)
+        {
+            _blad = ex.Message;
+        }
+    }
+
+    public class PatientForm
+    {
+        [Required] public string Pesel { get; set; } = "";
+        [Required] public string Imie { get; set; } = "";
+        [Required] public string Nazwisko { get; set; } = "";
+        public DateOnly DataUrodzenia { get; set; } = new(1980, 1, 1);
+        public Plec Plec { get; set; } = Plec.Kobieta;
+        public string? Telefon { get; set; }
+        public string? Email { get; set; }
+        public bool ZgodaSms { get; set; }
+        public DateOnly? DataOstatniegoBilansu { get; set; }
+    }
+}

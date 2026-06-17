@@ -1,0 +1,47 @@
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">Moje Zdrowie POZ</a>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Start
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="pacjenci">
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Pacjenci
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="pipeline">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Pipeline pacjentów
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="braki">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Braki badań
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="terminarz">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Terminarz
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="do-kontaktu">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Do kontaktu
+            </NavLink>
+        </div>
+    </nav>
+</div>

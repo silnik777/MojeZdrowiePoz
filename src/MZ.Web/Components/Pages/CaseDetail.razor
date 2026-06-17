@@ -1,0 +1,678 @@
+@page "/przypadek/{Id:guid}"
+@using Microsoft.EntityFrameworkCore
+@using MZ.Application.Dtos
+@using MZ.Domain.Entities
+@using MZ.Domain.Enums
+@using MZ.Infrastructure.Documents
+@using MZ.Infrastructure.Persistence
+@using MZ.Infrastructure.Services
+@using MZ.Web.Kbzod
+@inject EnrollmentService Enrollments
+@inject QuestionnaireService Questionnaires
+@inject QualificationService Qualifications
+@inject LabResultService LabResults
+@inject LabResultImportService LabImport
+@inject AppointmentService Appointments
+@inject SmsService Sms
+@inject VisitService Visits
+@inject DocumentService Documents
+@inject MzDbContext Db
+
+<PageTitle>Karta przypadku</PageTitle>
+
+@if (_e is null)
+{
+    <p><em>Wczytywanie…</em></p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-start">
+        <div>
+            <h1>@_e.Patient.Nazwisko @_e.Patient.Imie</h1>
+            <div class="text-muted">
+                PESEL @_e.Patient.Pesel · wiek @_e.Patient.Wiek(Dzis) · @_e.Patient.Plec
+            </div>
+        </div>
+        <div class="text-end">
+            <span class="badge bg-primary fs-6">@_e.Status</span>
+            @if (_e.TerminKontaktu is not null)
+            {
+                <div class="small mt-1">Termin kontaktu: <strong>@_e.TerminKontaktu?.ToString("yyyy-MM-dd")</strong></div>
+            }
+        </div>
+    </div>
+
+    @if (_komunikat is not null)
+    {
+        <div class="alert alert-success">@_komunikat</div>
+    }
+    @if (_blad is not null)
+    {
+        <div class="alert alert-danger">@_blad</div>
+    }
+
+    <!-- ANKIETA -->
+    <div class="card my-3">
+        <div class="card-header d-flex justify-content-between">
+            <span>1. Ankieta KBZOD</span>
+            @if (_e.Ankieta?.Score is not null)
+            {
+                <span>Wynik (score): <strong>@_e.Ankieta.Score</strong></span>
+            }
+        </div>
+        <div class="card-body">
+            <div class="row mb-2">
+                <div class="col">
+                    <label class="form-label">Źródło</label>
+                    <select class="form-select" @bind="_zrodlo">
+                        @foreach (var z in Enum.GetValues<ZrodloAnkiety>())
+                        {
+                            <option value="@z">@z</option>
+                        }
+                    </select>
+                </div>
+                <div class="col">
+                    <label class="form-label">Data wpływu</label>
+                    <input type="date" class="form-control" @bind="_dataWplywu" />
+                </div>
+                <div class="col">
+                    <label class="form-label">Data wypełnienia</label>
+                    <input type="date" class="form-control" @bind="_dataWypelnienia" />
+                </div>
+            </div>
+
+            @foreach (var pyt in KbzodPytania.Lista)
+            {
+                <div class="mb-2">
+                    <label class="form-label">@pyt.Tresc</label>
+                    <select class="form-select" value="@Odp(pyt.Kod)" @onchange="e => UstawOdp(pyt.Kod, e.Value?.ToString())">
+                        <option value="">— brak —</option>
+                        @foreach (var o in pyt.Opcje)
+                        {
+                            <option value="@o">@o</option>
+                        }
+                    </select>
+                </div>
+            }
+
+            <div class="mb-2">
+                <label class="form-label">Notatki</label>
+                <textarea class="form-control" rows="2" @bind="_notatki"></textarea>
+            </div>
+            <button class="btn btn-primary" @onclick="ZapiszAnkiete">Zapisz ankietę i przelicz score</button>
+
+            <hr />
+            <label class="form-label">Wgraj skan ankiety (PDF) — OCR oznaczy do weryfikacji</label>
+            <div class="d-flex gap-2 align-items-center">
+                <InputFile OnChange="WgrajSkan" accept=".pdf" class="form-control" />
+            </div>
+            @if (_e.Ankieta?.StatusWeryfikacji == StatusWeryfikacjiOcr.OczekujeNaWeryfikacje)
+            {
+                <div class="alert alert-warning mt-2 mb-0">
+                    Wgrano skan — odczyt OCR wymaga ręcznej weryfikacji odpowiedzi.
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- KWALIFIKACJA -->
+    <div class="card my-3 @(_e.Ankieta is null ? "opacity-50" : "")">
+        <div class="card-header">2. Kwalifikacja</div>
+        <div class="card-body">
+            @if (_e.Ankieta is null)
+            {
+                <p class="text-muted mb-0">Najpierw zapisz ankietę.</p>
+            }
+            else if (_e.Kwalifikacja is not null)
+            {
+                <p>Decyzja: <strong>@_e.Kwalifikacja.Decyzja</strong> (@_e.Kwalifikacja.DataDecyzji.ToString("yyyy-MM-dd"))</p>
+                @if (_e.Kwalifikacja.CzynnikiRyzyka.Count > 0)
+                {
+                    <p class="mb-0">Czynniki ryzyka: @string.Join(", ", _e.Kwalifikacja.CzynnikiRyzyka)</p>
+                }
+            }
+            else
+            {
+                <textarea class="form-control mb-2" rows="2" placeholder="Uzasadnienie (opcjonalnie)" @bind="_uzasadnienie"></textarea>
+                <button class="btn btn-success" @onclick="() => Kwalifikuj(DecyzjaKwalifikacji.Zakwalifikowany)">Zakwalifikuj</button>
+                <button class="btn btn-outline-danger" @onclick="() => Kwalifikuj(DecyzjaKwalifikacji.Niezakwalifikowany)">Wyklucz</button>
+            }
+        </div>
+    </div>
+
+    <!-- SKIEROWANIE -->
+    <div class="card my-3 @(_e.Status < PipelineStatus.ZakwalifikowanyDoProgramu ? "opacity-50" : "")">
+        <div class="card-header">3. Skierowanie na badania</div>
+        <div class="card-body">
+            @if (_e.Skierowanie is not null)
+            {
+                <p>Wystawiono @_e.Skierowanie.DataWystawienia.ToString("yyyy-MM-dd")
+                    @(_e.Skierowanie.Laboratorium is not null ? $"· {_e.Skierowanie.Laboratorium.Nazwa}" : "")</p>
+                <ul>
+                    @foreach (var z in _e.Skierowanie.Zlecone.OrderBy(z => z.TestDefinition.Nazwa))
+                    {
+                        <li>@z.TestDefinition.Nazwa (@z.TestDefinition.Kod)</li>
+                    }
+                </ul>
+            }
+            else if (_e.Kwalifikacja?.Decyzja == DecyzjaKwalifikacji.Zakwalifikowany)
+            {
+                <div class="mb-2" style="max-width:400px">
+                    <label class="form-label">Laboratorium</label>
+                    <select class="form-select" @bind="_laboratoriumId">
+                        <option value="">— wybierz —</option>
+                        @foreach (var l in _laboratoria)
+                        {
+                            <option value="@l.Id">@l.Nazwa</option>
+                        }
+                    </select>
+                </div>
+                <button class="btn btn-primary" @onclick="WystawSkierowanie">Dobierz pakiet i wystaw skierowanie</button>
+            }
+            else
+            {
+                <p class="text-muted mb-0">Dostępne po zakwalifikowaniu pacjenta.</p>
+            }
+        </div>
+    </div>
+
+    <!-- WYNIKI / KONTROLA KOMPLETNOŚCI -->
+    @if (_e.Skierowanie is not null)
+    {
+        <div class="card my-3">
+            <div class="card-header d-flex justify-content-between">
+                <span>4. Wyniki i kontrola kompletności</span>
+                @if (_e.MaBrakiBadan)
+                {
+                    <span class="badge bg-warning text-dark">Braki badań</span>
+                }
+                else
+                {
+                    <span class="badge bg-success">Komplet</span>
+                }
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <thead>
+                        <tr><th>Badanie</th><th>Wynik</th><th>Norma</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var z in _e.Skierowanie.Zlecone.OrderBy(z => z.TestDefinition.Nazwa))
+                        {
+                            var w = _e.Wyniki.FirstOrDefault(r => r.TestDefinitionId == z.TestDefinitionId);
+                            <tr class="@(w is null ? "table-warning" : "")">
+                                <td>@z.TestDefinition.Nazwa</td>
+                                <td>@(w is null ? "—" : $"{w.WartoscLiczbowa?.ToString() ?? w.WartoscTekstowa} {w.Jednostka}")</td>
+                                <td>@OcenaTekst(w)</td>
+                                <td>@(w is null ? "⚠ brak" : "✔ wykonane")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <div class="row g-2 align-items-end border-top pt-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Dodaj wynik ręcznie — badanie</label>
+                        <select class="form-select" @bind="_wynikDef">
+                            <option value="">— wybierz —</option>
+                            @foreach (var z in _e.Skierowanie.Zlecone.OrderBy(z => z.TestDefinition.Nazwa))
+                            {
+                                <option value="@z.TestDefinitionId">@z.TestDefinition.Nazwa</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Wartość</label>
+                        <input class="form-control" @bind="_wynikWartosc" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Data wyniku</label>
+                        <input type="date" class="form-control" @bind="_wynikData" />
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-outline-primary w-100" @onclick="DodajWynik">Dodaj</button>
+                    </div>
+                </div>
+
+                <hr />
+                <label class="form-label">Import wyników z eLaborat (plik HL7 CDA XML)</label>
+                <InputFile OnChange="ImportujXml" accept=".xml" class="form-control" />
+                @if (_importPodsumowanie is not null)
+                {
+                    <div class="small text-muted mt-1">@_importPodsumowanie</div>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- TERMINY I POWIADOMIENIA -->
+    <div class="card my-3">
+        <div class="card-header">5. Terminy i powiadomienia SMS</div>
+        <div class="card-body">
+            @if (!_e.Patient.ZgodaSms)
+            {
+                <div class="alert alert-secondary py-1">Pacjent nie wyraził zgody na SMS — powiadomienia nie będą wysyłane.</div>
+            }
+
+            @if (_e.Terminy.Any())
+            {
+                <table class="table table-sm">
+                    <thead><tr><th>Typ</th><th>Termin</th><th>Laboratorium</th><th>Status</th></tr></thead>
+                    <tbody>
+                        @foreach (var t in _e.Terminy.OrderBy(t => t.DataGodzina))
+                        {
+                            <tr>
+                                <td>@t.Typ</td>
+                                <td>@t.DataGodzina.LocalDateTime.ToString("dd.MM.yyyy HH:mm")</td>
+                                <td>@(t.Laboratorium?.Nazwa ?? "—")</td>
+                                <td>@t.Status</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+
+            <div class="row g-2 align-items-end border-top pt-3">
+                <div class="col-md-3">
+                    <label class="form-label">Typ terminu</label>
+                    <select class="form-select" @bind="_terminTyp">
+                        @foreach (var t in Enum.GetValues<TypTerminu>())
+                        {
+                            <option value="@t">@t</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Data i godzina</label>
+                    <input type="datetime-local" class="form-control" @bind="_terminData" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Laboratorium</label>
+                    <select class="form-select" @bind="_terminLab">
+                        <option value="">— brak —</option>
+                        @foreach (var l in _laboratoria)
+                        {
+                            <option value="@l.Id">@l.Nazwa</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-outline-primary w-100" @onclick="Umow">Umów termin</button>
+                </div>
+            </div>
+
+            <hr />
+            <div class="d-flex gap-2 flex-wrap">
+                <button class="btn btn-sm btn-outline-success" @onclick="@(() => WyslijSms(TypPowiadomienia.WynikiGotowe))">SMS: wyniki gotowe</button>
+                <button class="btn btn-sm btn-outline-success" @onclick="@(() => WyslijSms(TypPowiadomienia.ZaproszenieNaWizyte))">SMS: zaproszenie na wizytę</button>
+                <button class="btn btn-sm btn-outline-success" @onclick="@(() => WyslijSms(TypPowiadomienia.KontaktTerminowy30Dni))">SMS: prośba o kontakt</button>
+            </div>
+
+            @if (_smsHistoria.Any())
+            {
+                <ul class="mt-3 small mb-0">
+                    @foreach (var s in _smsHistoria)
+                    {
+                        <li>@s.UtworzonoUtc.LocalDateTime.ToString("dd.MM HH:mm") — @s.Typ — @s.Status @(string.IsNullOrEmpty(s.BladOpis) ? "" : $"({s.BladOpis})")</li>
+                    }
+                </ul>
+            }
+        </div>
+    </div>
+
+    <!-- WIZYTA + IPZ + DOKUMENTY -->
+    <div class="card my-3">
+        <div class="card-header d-flex justify-content-between">
+            <span>6. Wizyta podsumowująca i IPZ</span>
+            @if (_e.Wizyta is not null)
+            {
+                <span>BMI: <strong>@(_e.Wizyta.Bmi?.ToString() ?? "—")</strong></span>
+            }
+        </div>
+        <div class="card-body">
+            <div class="row g-2">
+                <div class="col-md-3"><label class="form-label">Data wizyty</label>
+                    <input type="date" class="form-control" @bind="_wizData" /></div>
+                <div class="col-md-3"><label class="form-label">Ciśnienie skurcz./rozkurcz.</label>
+                    <div class="d-flex gap-1">
+                        <input class="form-control" placeholder="skurcz." @bind="_skurcz" />
+                        <input class="form-control" placeholder="rozkurcz." @bind="_rozkurcz" />
+                    </div></div>
+                <div class="col-md-2"><label class="form-label">Tętno</label>
+                    <input class="form-control" @bind="_tetno" /></div>
+                <div class="col-md-2"><label class="form-label">Wzrost [cm]</label>
+                    <input class="form-control" @bind="_wzrost" /></div>
+                <div class="col-md-2"><label class="form-label">Waga [kg]</label>
+                    <input class="form-control" @bind="_waga" /></div>
+            </div>
+            <div class="row g-2 mt-1">
+                <div class="col-md-3"><label class="form-label">Obwód talii [cm]</label>
+                    <input class="form-control" @bind="_talia" /></div>
+                <div class="col-md-9"><label class="form-label">Podsumowanie wyników / zalecenia</label>
+                    <input class="form-control" @bind="_wizZalecenia" /></div>
+            </div>
+            <button class="btn btn-primary mt-2" @onclick="ZapiszWizyte">Zapisz wizytę</button>
+
+            @if (_e.Wizyta is not null)
+            {
+                <hr />
+                <h6>Indywidualny Plan Zdrowotny (IPZ)</h6>
+                <div class="row g-2">
+                    <div class="col-md-6"><label class="form-label">Cele (po jednym w wierszu)</label>
+                        <textarea class="form-control" rows="3" @bind="_cele"></textarea></div>
+                    <div class="col-md-6"><label class="form-label">Interwencje (po jednej w wierszu)</label>
+                        <textarea class="form-control" rows="3" @bind="_interwencje"></textarea></div>
+                </div>
+                <div class="row g-2 mt-1">
+                    <div class="col-md-6"><label class="form-label">Zalecenia szczepień</label>
+                        <input class="form-control" @bind="_szczepienia" /></div>
+                    <div class="col-md-6"><label class="form-label">Dalsza diagnostyka</label>
+                        <input class="form-control" @bind="_diagnostyka" /></div>
+                </div>
+                <button class="btn btn-primary mt-2" @onclick="ZapiszIpz">Zapisz IPZ</button>
+
+                <hr />
+                <div class="d-flex gap-2 flex-wrap">
+                    <button class="btn btn-outline-secondary" @onclick="GenerujIpz">Generuj IPZ (PDF)</button>
+                    <button class="btn btn-outline-secondary" @onclick="GenerujSkierowanie">Generuj skierowanie (PDF)</button>
+                    @if (_e.Status == PipelineStatus.WizytaZrealizowana)
+                    {
+                        <button class="btn btn-success" @onclick="DoRozliczenia">Przekaż do rozliczenia</button>
+                    }
+                </div>
+            }
+
+            @if (_dokumenty.Any())
+            {
+                <table class="table table-sm mt-3">
+                    <thead><tr><th>Dokument</th><th>Podpis</th><th></th><th>Wgraj podpisany</th></tr></thead>
+                    <tbody>
+                        @foreach (var d in _dokumenty)
+                        {
+                            <tr>
+                                <td>@d.Typ</td>
+                                <td>@(d.Podpisany ? d.TypPodpisu.ToString() : "niepodpisany")</td>
+                                <td><a class="btn btn-sm btn-outline-primary" href="dokument/@d.Id" target="_blank">Pobierz</a></td>
+                                <td>
+                                    <div class="d-flex gap-1">
+                                        <select class="form-select form-select-sm" @bind="_typPodpisu">
+                                            @foreach (var tp in Enum.GetValues<TypPodpisu>().Where(x => x != TypPodpisu.Brak))
+                                            {
+                                                <option value="@tp">@tp</option>
+                                            }
+                                        </select>
+                                        <InputFile OnChange="@(e => WgrajPodpisany(e, d.Id))" accept=".pdf" class="form-control form-control-sm" />
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+
+    <!-- HISTORIA -->
+    <div class="card my-3">
+        <div class="card-header">Historia statusów</div>
+        <div class="card-body">
+            <ul class="mb-0">
+                @foreach (var h in _e.Historia.OrderBy(h => h.DataPrzejscia))
+                {
+                    <li>@h.DataPrzejscia.LocalDateTime.ToString("yyyy-MM-dd HH:mm") — @(h.StatusZ?.ToString() ?? "(start)") → @h.StatusNa @(string.IsNullOrEmpty(h.Komentarz) ? "" : $"· {h.Komentarz}")</li>
+                }
+            </ul>
+        </div>
+    </div>
+
+    <a class="btn btn-link" href="pipeline">← Pipeline</a>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private ProgramEnrollment? _e;
+    private List<Laboratory> _laboratoria = new();
+    private string? _komunikat;
+    private string? _blad;
+
+    // Stan formularza ankiety.
+    private ZrodloAnkiety _zrodlo = ZrodloAnkiety.WprowadzonaRecznie;
+    private DateOnly _dataWplywu = DateOnly.FromDateTime(DateTime.Today);
+    private DateOnly? _dataWypelnienia;
+    private string? _notatki;
+    private readonly Dictionary<string, string?> _odp = new();
+
+    private string? _uzasadnienie;
+    private Guid? _laboratoriumId;
+
+    // Stan formularza wyników.
+    private string? _wynikDef;
+    private string? _wynikWartosc;
+    private DateOnly? _wynikData = DateOnly.FromDateTime(DateTime.Today);
+    private string? _importPodsumowanie;
+
+    // Stan terminarza / SMS.
+    private TypTerminu _terminTyp = TypTerminu.PobranieBadan;
+    private DateTime _terminData = DateTime.Today.AddDays(1).AddHours(9);
+    private string? _terminLab;
+    private List<SmsMessage> _smsHistoria = new();
+
+    // Stan wizyty / IPZ / dokumentów.
+    private DateOnly _wizData = DateOnly.FromDateTime(DateTime.Today);
+    private string? _skurcz, _rozkurcz, _tetno, _wzrost, _waga, _talia, _wizZalecenia;
+    private string? _cele, _interwencje, _szczepienia, _diagnostyka;
+    private List<SignedDocument> _dokumenty = new();
+    private TypPodpisu _typPodpisu = TypPodpisu.ProfilZaufany;
+
+    private static DateOnly Dzis => DateOnly.FromDateTime(DateTime.Today);
+
+    protected override async Task OnParametersSetAsync() => await Wczytaj();
+
+    private async Task Wczytaj()
+    {
+        _e = await Enrollments.PobierzZeSzczegolamiAsync(Id);
+        _laboratoria = await Db.Laboratories.AsNoTracking().Where(l => l.Aktywny).OrderBy(l => l.Nazwa).ToListAsync();
+        _smsHistoria = _e is null ? new() : await Sms.HistoriaAsync(Id);
+        _dokumenty = _e is null ? new() : await Documents.ListaAsync(Id);
+        if (_e?.Wizyta is not null)
+        {
+            var v = _e.Wizyta;
+            _wizData = v.DataWizyty;
+            _skurcz = v.CisnienieSkurczowe?.ToString();
+            _rozkurcz = v.CisnienieRozkurczowe?.ToString();
+            _tetno = v.Tetno?.ToString();
+            _wzrost = v.WzrostCm?.ToString();
+            _waga = v.WagaKg?.ToString();
+            _talia = v.ObwodTaliiCm?.ToString();
+            _wizZalecenia = v.Zalecenia;
+            if (v.Ipz is not null)
+            {
+                _cele = string.Join('\n', v.Ipz.Cele);
+                _interwencje = string.Join('\n', v.Ipz.Interwencje);
+                _szczepienia = v.Ipz.ZaleceniaSzczepien;
+                _diagnostyka = v.Ipz.DalszaDiagnostyka;
+            }
+        }
+        if (_e?.Ankieta is not null)
+        {
+            _zrodlo = _e.Ankieta.Zrodlo;
+            _dataWplywu = _e.Ankieta.DataWplywu;
+            _dataWypelnienia = _e.Ankieta.DataWypelnienia;
+            _notatki = _e.Ankieta.Notatki;
+            _odp.Clear();
+            foreach (var o in _e.Ankieta.Odpowiedzi)
+                _odp[o.KodPytania] = o.Wartosc;
+        }
+    }
+
+    private string Odp(string kod) => _odp.TryGetValue(kod, out var v) ? v ?? "" : "";
+    private void UstawOdp(string kod, string? wartosc) => _odp[kod] = wartosc;
+
+    private async Task ZapiszAnkiete()
+    {
+        await Wykonaj(async () =>
+        {
+            var input = new QuestionnaireInput(_zrodlo, _dataWypelnienia, _dataWplywu,
+                _odp.Where(kv => !string.IsNullOrWhiteSpace(kv.Value)).ToDictionary(kv => kv.Key, kv => kv.Value!),
+                _notatki);
+            var wynik = await Questionnaires.ZapiszAsync(Id, input);
+            _komunikat = $"Zapisano ankietę. Score: {wynik.Score}." +
+                (wynik.CzynnikiRyzyka.Count > 0 ? $" Czynniki ryzyka: {string.Join(", ", wynik.CzynnikiRyzyka)}." : "");
+        });
+    }
+
+    private async Task WgrajSkan(InputFileChangeEventArgs e)
+    {
+        await Wykonaj(async () =>
+        {
+            await using var stream = e.File.OpenReadStream(20 * 1024 * 1024);
+            await Questionnaires.WgrajSkanAsync(Id, stream, e.File.Name);
+            _komunikat = "Wgrano skan ankiety.";
+        });
+    }
+
+    private async Task Kwalifikuj(DecyzjaKwalifikacji decyzja)
+    {
+        await Wykonaj(async () =>
+        {
+            await Qualifications.KwalifikujAsync(Id, decyzja, _uzasadnienie);
+            _komunikat = $"Zapisano kwalifikację: {decyzja}.";
+        });
+    }
+
+    private async Task WystawSkierowanie()
+    {
+        await Wykonaj(async () =>
+        {
+            var s = await Qualifications.WystawSkierowanieAsync(Id, _laboratoriumId);
+            _komunikat = $"Wystawiono skierowanie ({s.Zlecone.Count} badań).";
+        });
+    }
+
+    private static string OcenaTekst(TestResult? w) => w?.OcenaNormy switch
+    {
+        OcenaNormy.Norma => "w normie",
+        OcenaNormy.Ponizej => "⬇ poniżej",
+        OcenaNormy.Powyzej => "⬆ powyżej",
+        _ => "—"
+    };
+
+    private async Task DodajWynik()
+    {
+        if (!Guid.TryParse(_wynikDef, out var defId)) { _blad = "Wybierz badanie."; return; }
+        await Wykonaj(async () =>
+        {
+            decimal? liczba = decimal.TryParse(_wynikWartosc?.Replace(',', '.'),
+                System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var d)
+                ? d : null;
+            var tekst = liczba is null ? _wynikWartosc : null;
+            await LabResults.DodajRecznieAsync(Id, defId, liczba, tekst, _wynikData);
+            _komunikat = "Dodano wynik.";
+            _wynikDef = null; _wynikWartosc = null;
+        });
+    }
+
+    private async Task ImportujXml(InputFileChangeEventArgs e)
+    {
+        await Wykonaj(async () =>
+        {
+            var labId = _e!.Skierowanie!.LaboratoriumId ?? _laboratoria.FirstOrDefault()?.Id;
+            if (labId is null) { _blad = "Brak zdefiniowanego laboratorium."; return; }
+            await using var stream = e.File.OpenReadStream(20 * 1024 * 1024);
+            var wynik = await LabImport.ImportujAsync(stream, labId.Value);
+            _importPodsumowanie = $"Dokumentów: {wynik.Dokumentow}, dopasowanych: {wynik.Dopasowanych}, " +
+                $"zapisanych wyników: {wynik.ZapisanychWynikow}, niedopasowanych: {wynik.Niedopasowanych}." +
+                (wynik.Ostrzezenia.Count > 0 ? " Ostrzeżenia: " + string.Join("; ", wynik.Ostrzezenia) : "");
+            _komunikat = "Zaimportowano wyniki.";
+        });
+    }
+
+    private async Task Umow()
+    {
+        await Wykonaj(async () =>
+        {
+            Guid? labId = Guid.TryParse(_terminLab, out var g) ? g : null;
+            await Appointments.UmowAsync(Id, _terminTyp, new DateTimeOffset(_terminData), labId);
+            _komunikat = "Umówiono termin (utworzono przypomnienie).";
+        });
+    }
+
+    private async Task WyslijSms(TypPowiadomienia typ)
+    {
+        await Wykonaj(async () =>
+        {
+            var proba = await Sms.WyslijDoPacjentaAsync(Id, typ);
+            _komunikat = proba.Info;
+        });
+    }
+
+    private async Task ZapiszWizyte()
+    {
+        await Wykonaj(async () =>
+        {
+            var input = new VisitInput(_wizData, Cint(_skurcz), Cint(_rozkurcz), Cint(_tetno),
+                Cdbl(_wzrost), Cdbl(_waga), Cdbl(_talia), null, _wizZalecenia);
+            await Visits.ZapiszWizyteAsync(Id, input);
+            _komunikat = "Zapisano wizytę.";
+        });
+    }
+
+    private async Task ZapiszIpz()
+    {
+        await Wykonaj(async () =>
+        {
+            var input = new IpzInput(Linie(_cele), Linie(_interwencje), _szczepienia, _diagnostyka, null);
+            await Visits.ZapiszIpzAsync(Id, input);
+            _komunikat = "Zapisano IPZ.";
+        });
+    }
+
+    private async Task GenerujIpz() => await Wykonaj(async () =>
+    {
+        await Documents.GenerujIpzAsync(Id);
+        _komunikat = "Wygenerowano PDF z IPZ.";
+    });
+
+    private async Task GenerujSkierowanie() => await Wykonaj(async () =>
+    {
+        await Documents.GenerujSkierowanieAsync(Id);
+        _komunikat = "Wygenerowano PDF skierowania.";
+    });
+
+    private async Task DoRozliczenia() => await Wykonaj(async () =>
+    {
+        await Visits.PrzekazDoRozliczeniaAsync(Id);
+        _komunikat = "Przekazano do rozliczenia.";
+    });
+
+    private async Task WgrajPodpisany(InputFileChangeEventArgs e, Guid documentId) => await Wykonaj(async () =>
+    {
+        await using var stream = e.File.OpenReadStream(20 * 1024 * 1024);
+        await Documents.WgrajPodpisanyAsync(documentId, stream, _typPodpisu);
+        _komunikat = "Wgrano podpisany dokument.";
+    });
+
+    private static int? Cint(string? s) => int.TryParse(s, out var v) ? v : null;
+    private static double? Cdbl(string? s) =>
+        double.TryParse(s?.Replace(',', '.'), System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : null;
+    private static List<string> Linie(string? s) =>
+        string.IsNullOrWhiteSpace(s) ? new()
+            : s.Split('\n').Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+
+    private async Task Wykonaj(Func<Task> akcja)
+    {
+        _komunikat = null;
+        _blad = null;
+        try
+        {
+            await akcja();
+            await Wczytaj();
+        }
+        catch (Exception ex)
+        {
+            _blad = ex.Message;
+        }
+    }
+}

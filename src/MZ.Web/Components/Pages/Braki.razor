@@ -1,0 +1,71 @@
+@page "/braki"
+@using Microsoft.EntityFrameworkCore
+@using MZ.Domain.Entities
+@using MZ.Infrastructure.Persistence
+@using MZ.Infrastructure.Services
+@inject LabResultService LabResults
+@inject MzDbContext Db
+
+<PageTitle>Braki badań</PageTitle>
+
+<h1>Braki badań</h1>
+<p>Przypadki, w których laboratorium nie wykonało części zleconych (wymaganych) badań.</p>
+
+<div class="mb-3" style="max-width:360px">
+    <label class="form-label">Laboratorium</label>
+    <select class="form-select" @bind="_lab" @bind:after="Wczytaj">
+        <option value="">— wszystkie —</option>
+        @foreach (var l in _laboratoria)
+        {
+            <option value="@l.Id">@l.Nazwa</option>
+        }
+    </select>
+</div>
+
+@if (_pozycje is null)
+{
+    <p><em>Wczytywanie…</em></p>
+}
+else if (_pozycje.Count == 0)
+{
+    <div class="alert alert-success">Brak zaległości — wszystkie zlecone badania mają wyniki.</div>
+}
+else
+{
+    <table class="table table-sm">
+        <thead>
+            <tr><th>Laboratorium</th><th>Pacjent</th><th>Status</th><th>Brakujące badania</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var p in _pozycje)
+            {
+                <tr>
+                    <td>@(p.Laboratorium ?? "—")</td>
+                    <td>@p.Pacjent</td>
+                    <td>@p.Status</td>
+                    <td>@string.Join(", ", p.BrakujaceBadania)</td>
+                    <td><a class="btn btn-sm btn-outline-primary" href="przypadek/@p.EnrollmentId">Otwórz</a></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <p class="text-muted">Łącznie przypadków z brakami: <strong>@_pozycje.Count</strong></p>
+}
+
+@code {
+    private List<BrakiPozycja>? _pozycje;
+    private List<Laboratory> _laboratoria = new();
+    private string? _lab;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _laboratoria = await Db.Laboratories.AsNoTracking().Where(l => l.Aktywny).OrderBy(l => l.Nazwa).ToListAsync();
+        await Wczytaj();
+    }
+
+    private async Task Wczytaj()
+    {
+        Guid? labId = Guid.TryParse(_lab, out var g) ? g : null;
+        _pozycje = await LabResults.RaportBrakowAsync(labId);
+    }
+}

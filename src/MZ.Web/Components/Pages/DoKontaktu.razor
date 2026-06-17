@@ -1,0 +1,65 @@
+@page "/do-kontaktu"
+@using MZ.Domain.Enums
+@using MZ.Infrastructure.Services
+@inject NotificationService Notifications
+@inject SmsService Sms
+
+<PageTitle>Do kontaktu</PageTitle>
+
+<h1>Do kontaktu (termin 30 dni)</h1>
+<p>Pacjenci po kwalifikacji, z którymi należy się skontaktować w celu umówienia badań.</p>
+
+@if (_info is not null)
+{
+    <div class="alert alert-info">@_info</div>
+}
+
+@if (_lista is null)
+{
+    <p><em>Wczytywanie…</em></p>
+}
+else if (_lista.Count == 0)
+{
+    <div class="alert alert-success">Brak przypadków oczekujących na kontakt.</div>
+}
+else
+{
+    <table class="table table-sm">
+        <thead><tr><th>Pacjent</th><th>Telefon</th><th>Status</th><th>Termin kontaktu</th><th>Dni</th><th></th></tr></thead>
+        <tbody>
+            @foreach (var p in _lista)
+            {
+                <tr class="@(p.DniDoTerminu is < 0 ? "table-danger" : p.DniDoTerminu is <= 3 ? "table-warning" : "")">
+                    <td>@p.Pacjent</td>
+                    <td>@(p.Telefon ?? "—") @(p.ZgodaSms ? "" : "(brak zgody SMS)")</td>
+                    <td>@p.Status</td>
+                    <td>@(p.TerminKontaktu?.ToString("yyyy-MM-dd") ?? "—")</td>
+                    <td>@(p.DniDoTerminu?.ToString() ?? "—")</td>
+                    <td>
+                        <a class="btn btn-sm btn-outline-primary" href="przypadek/@p.EnrollmentId">Otwórz</a>
+                        @if (p.ZgodaSms && !string.IsNullOrEmpty(p.Telefon))
+                        {
+                            <button class="btn btn-sm btn-outline-success" @onclick="() => Przypomnij(p.EnrollmentId)">SMS</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<DoKontaktuPozycja>? _lista;
+    private string? _info;
+
+    protected override async Task OnInitializedAsync() => await Wczytaj();
+
+    private async Task Wczytaj() => _lista = await Notifications.DoKontaktuAsync();
+
+    private async Task Przypomnij(Guid enrollmentId)
+    {
+        var proba = await Sms.WyslijDoPacjentaAsync(enrollmentId, TypPowiadomienia.KontaktTerminowy30Dni);
+        _info = proba.Info;
+        await Wczytaj();
+    }
+}
